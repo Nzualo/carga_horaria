@@ -1,8 +1,37 @@
-require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+
+// 1. Carregamento Seguro de Variáveis de Ambiente (.env)
+const envPath = path.join(__dirname, '..', '.env');
+if (fs.existsSync(envPath)) {
+  try {
+    require('dotenv').config({ path: envPath });
+  } catch (e) {
+    // Parser nativo caso dotenv não esteja instalado
+    try {
+      const envLines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
+      for (const line of envLines) {
+        const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+        if (match) {
+          const key = match[1];
+          let val = match[2] || '';
+          val = val.replace(/^['"](.*)['"]$/, '$1').trim();
+          if (!process.env[key]) process.env[key] = val;
+        }
+      }
+    } catch (parseErr) {}
+  }
+}
+
 const initSqlJs = require('sql.js');
-const { createClient } = require('@libsql/client');
+
+// 2. Cliente Turso Opcional e Resiliente
+let createClient = null;
+try {
+  createClient = require('@libsql/client').createClient;
+} catch (e) {
+  // @libsql/client não disponível; opera em modo local SQLite puro
+}
 
 const DB_PATH = path.join(__dirname, 'data', 'sdejt_inhassoro.db');
 const SEED_PATH = path.join(__dirname, 'data', 'seed.json');
@@ -13,7 +42,7 @@ const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI
 let db = null;
 let tursoClient = null;
 
-if (TURSO_URL && TURSO_TOKEN) {
+if (createClient && TURSO_URL && TURSO_TOKEN) {
   try {
     tursoClient = createClient({
       url: TURSO_URL,
